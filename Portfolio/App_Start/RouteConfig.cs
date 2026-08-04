@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Web;
@@ -13,10 +13,13 @@ namespace Portfolio
         {
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 
+            // Ignore root path so IIS serves static index.html from React
+            routes.IgnoreRoute(""); 
+
             routes.MapRoute(
                 name: "Default",
                 url: "{controller}/{action}/{id}",
-                defaults: new { controller = "Home", action = "Index", id = UrlParameter.Optional }
+                defaults: new { id = UrlParameter.Optional }
             );
         }
     }

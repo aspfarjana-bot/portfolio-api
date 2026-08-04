@@ -14,6 +14,7 @@ namespace Portfolio.Controllers
     public class UploadController : ApiController
     {
         private static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg" };
+        private static readonly string[] AllowedDocExtensions = { ".pdf", ".doc", ".docx" };
         private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5MB
 
         // POST: api/Upload/image
@@ -68,6 +69,65 @@ namespace Portfolio.Controllers
                 var imageUrl = $"{baseUrl}/Content/uploads/{uniqueName}";
 
                 return Ok(new { url = imageUrl, fileName = uniqueName });
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
+        // POST: api/Upload/document
+        [HttpPost]
+        [JwtAuthentication]
+        [Route("api/Upload/document")]
+        public async Task<IHttpActionResult> UploadDocument()
+        {
+            if (!Request.Content.IsMimeMultipartContent())
+                return BadRequest("Unsupported media type. Please send multipart/form-data.");
+
+            var uploadFolder = HttpContext.Current.Server.MapPath("~/Content/uploads");
+            if (!Directory.Exists(uploadFolder))
+                Directory.CreateDirectory(uploadFolder);
+
+            var provider = new MultipartFormDataStreamProvider(uploadFolder);
+
+            try
+            {
+                await Request.Content.ReadAsMultipartAsync(provider);
+
+                var file = provider.FileData.FirstOrDefault();
+                if (file == null)
+                    return BadRequest("No file was uploaded.");
+
+                // Validate file size
+                var fileInfo = new FileInfo(file.LocalFileName);
+                if (fileInfo.Length > MaxFileSizeBytes)
+                {
+                    File.Delete(file.LocalFileName);
+                    return BadRequest("File size exceeds 5MB limit.");
+                }
+
+                // Get original filename & extension
+                var originalName = file.Headers.ContentDisposition.FileName?.Trim('"') ?? "upload";
+                var extension = Path.GetExtension(originalName).ToLowerInvariant();
+
+                if (!AllowedDocExtensions.Contains(extension))
+                {
+                    File.Delete(file.LocalFileName);
+                    return BadRequest($"File type '{extension}' is not allowed. Allowed: pdf, doc, docx.");
+                }
+
+                // Rename to a unique name to avoid conflicts
+                var uniqueName = $"{Guid.NewGuid()}{extension}";
+                var finalPath = Path.Combine(uploadFolder, uniqueName);
+                File.Move(file.LocalFileName, finalPath);
+
+                // Build public URL
+                var request = Request;
+                var baseUrl = $"{request.RequestUri.Scheme}://{request.RequestUri.Authority}";
+                var documentUrl = $"{baseUrl}/Content/uploads/{uniqueName}";
+
+                return Ok(new { url = documentUrl, fileName = uniqueName });
             }
             catch (Exception ex)
             {
